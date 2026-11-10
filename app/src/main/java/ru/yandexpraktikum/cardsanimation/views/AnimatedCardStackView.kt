@@ -2,6 +2,9 @@ package ru.yandexpraktikum.cardsanimation.views
 
 import android.content.Context
 import android.util.AttributeSet
+import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import ru.yandexpraktikum.cardsanimation.model.CardData
 
@@ -14,10 +17,26 @@ class AnimatedCardStackView @JvmOverloads constructor(
     private var cardDataList: List<CardData> = emptyList()
     private val cards = mutableListOf<AnimatedCardView>()
     private var isRotated = false
+    private val gestureDetector = GestureDetector(context, object: GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            isRotated = !isRotated
+            updateCardPositions()
+            Log.d("ANIM", "onTouchEvent")
+            return true
+        }
+
+        override fun onDown(e: MotionEvent): Boolean {
+            return true
+        }
+    })
 
     fun setCards(newCardDataList: List<CardData>) {
         cardDataList = newCardDataList
         setupCards()
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event)
     }
 
     private fun setupCards() {
@@ -72,7 +91,7 @@ class AnimatedCardStackView @JvmOverloads constructor(
             cardView.pivotY = cardHeight
 
             // TODO: [Задание 1] Замените на метод, который анимирует движение карты
-            cardView.rotation = targetRotation
+            cardView.animateCardRotation(targetRotation)
         }
     }
 
