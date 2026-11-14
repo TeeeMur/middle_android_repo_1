@@ -95,8 +95,6 @@ class AnimatedCardStackView @JvmOverloads constructor(
             cards.add(cardView)
             addView(cardView)
         }
-        // Возврат в исходное положение
-        isRotated = false
         updateCardPositions()
     }
 
@@ -105,26 +103,23 @@ class AnimatedCardStackView @JvmOverloads constructor(
         removeAllViews()
     }
 
-    private fun getBaseRotation(idx: Int): Float {
-        return if (cards.size > 1) {
+    private fun getCardsRotation(idx: Int): Float {
+        if (cards.size <= 1) return 0f
+        return if (isRotated) {
+            val angleStep = 180f / (cards.size - 1)
+            90f - (idx * angleStep)
+        } else {
             val angleStep = 45f / (cards.size - 1)
             22.5f - (idx * angleStep)
-        } else {
-            0f
         }
     }
 
     private fun updateCardPositions(animate: Boolean = false) {
-        val cardCount = cards.size
-
         cards.forEachIndexed { index, cardView ->
             // Расчёт расположения карт в исходной позиции
 
             // Расчёт финальной позиции (для эффекта раскрытой колоды карт)
-            val targetRotation = if (isRotated) {
-                val angleStep = if (cardCount > 1) 180f / (cardCount - 1) else 0f
-                90f - (index * angleStep)
-            } else getBaseRotation(index)
+            val targetRotation = getCardsRotation(index)
 
             val cardWidth = 100f * resources.displayMetrics.density
             val cardHeight = 160f * resources.displayMetrics.density
@@ -166,12 +161,12 @@ class AnimatedCardStackView @JvmOverloads constructor(
                     cards.forEachIndexed  { idx, view ->
                         if (idx != 0) {
                             view.animateCardRotation(
-                                getBaseRotation((idx - 1).mod(cards.size))
+                                getCardsRotation((idx - 1).mod(cards.size))
                             )
                         }
                     }
                     moveCardToFinalPosition(
-                        getBaseRotation(cards.size - 1)
+                        getCardsRotation(cards.size - 1)
                     ) {
                         isAnimating = false
                         animationStep = 0
