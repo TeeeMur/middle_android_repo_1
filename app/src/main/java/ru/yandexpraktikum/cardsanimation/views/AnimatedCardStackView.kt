@@ -2,8 +2,14 @@ package ru.yandexpraktikum.cardsanimation.views
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.widget.FrameLayout
+import ru.yandexpraktikum.cardsanimation.HORIZONTAL_DRAG_THRESHOLD
+import ru.yandexpraktikum.cardsanimation.VERTICAL_DRAG_THRESHOLD
 import ru.yandexpraktikum.cardsanimation.model.CardData
+import kotlin.math.abs
+import kotlin.math.pow
 
 class AnimatedCardStackView @JvmOverloads constructor(
     context: Context,
@@ -14,10 +20,69 @@ class AnimatedCardStackView @JvmOverloads constructor(
     private var cardDataList: List<CardData> = emptyList()
     private val cards = mutableListOf<AnimatedCardView>()
     private var isRotated = false
+    private var verticalDragAmount = 0f
+    private var horizontalDragAmount = 0f
+
+    private var isAnimating = false
+    private var animationStep = 0
+
+
+    private val gestureDetector = GestureDetector(context, object: GestureDetector.SimpleOnGestureListener() {
+
+        override fun onDown(e: MotionEvent): Boolean {
+            return true
+        }
+
+        override fun onFling(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            velocityX: Float,
+            velocityY: Float
+        ): Boolean {
+            e1?.let {
+                verticalDragAmount += e2.y - e1.y
+                horizontalDragAmount += e2.x - e1.x
+            }
+            return true
+        }
+
+        override fun onScroll(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            distanceX: Float,
+            distanceY: Float
+        ): Boolean {
+            verticalDragAmount += distanceY
+            horizontalDragAmount += distanceX
+            return true
+        }
+    })
 
     fun setCards(newCardDataList: List<CardData>) {
         cardDataList = newCardDataList
         setupCards()
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_UP &&
+            verticalDragAmount.pow(2) + horizontalDragAmount.pow(2) > 0) {
+            handleDragEnd()
+            verticalDragAmount = 0f
+            horizontalDragAmount = 0f
+            return true
+        }
+        return gestureDetector.onTouchEvent(event)
+    }
+
+    private fun handleDragEnd() {
+        val absoluteVertical = abs(verticalDragAmount)
+        val absoluteHorizontal = abs(horizontalDragAmount)
+        if (absoluteVertical > VERTICAL_DRAG_THRESHOLD && absoluteVertical > absoluteHorizontal) {
+            isRotated = verticalDragAmount > 0
+            updateCardPositions(true)
+        } else if (absoluteHorizontal > HORIZONTAL_DRAG_THRESHOLD && absoluteHorizontal > absoluteVertical) {
+            startCardSwapAnimation(cards.first())
+        }
     }
 
     private fun setupCards() {
@@ -30,8 +95,6 @@ class AnimatedCardStackView @JvmOverloads constructor(
             cards.add(cardView)
             addView(cardView)
         }
-        // Возврат в исходное положение
-        isRotated = false
         updateCardPositions()
     }
 
@@ -40,25 +103,23 @@ class AnimatedCardStackView @JvmOverloads constructor(
         removeAllViews()
     }
 
-    private fun updateCardPositions() {
-        val cardCount = cards.size
+    private fun getCardsRotation(idx: Int): Float {
+        if (cards.size <= 1) return 0f
+        return if (isRotated) {
+            val angleStep = 180f / (cards.size - 1)
+            90f - (idx * angleStep)
+        } else {
+            val angleStep = 45f / (cards.size - 1)
+            22.5f - (idx * angleStep)
+        }
+    }
 
+    private fun updateCardPositions(animate: Boolean = false) {
         cards.forEachIndexed { index, cardView ->
             // Расчёт расположения карт в исходной позиции
-            val baseRotation = if (cardCount > 1) {
-                val angleStep = 45f / (cardCount - 1)
-                22.5f - (index * angleStep)
-            } else {
-                0f
-            }
 
             // Расчёт финальной позиции (для эффекта раскрытой колоды карт)
-            val targetRotation = if (isRotated) {
-                val angleStep = if (cardCount > 1) 180f / (cardCount - 1) else 0f
-                90f - (index * angleStep)
-            } else {
-                baseRotation
-            }
+            val targetRotation = getCardsRotation(index)
 
             val cardWidth = 100f * resources.displayMetrics.density
             val cardHeight = 160f * resources.displayMetrics.density
@@ -72,7 +133,8 @@ class AnimatedCardStackView @JvmOverloads constructor(
             cardView.pivotY = cardHeight
 
             // TODO: [Задание 1] Замените на метод, который анимирует движение карты
-            cardView.rotation = targetRotation
+            if (animate) cardView.animateCardRotation(targetRotation)
+            else cardView.rotation = targetRotation
         }
     }
 
@@ -86,8 +148,34 @@ class AnimatedCardStackView @JvmOverloads constructor(
     private fun startCardSwapAnimation(bottomCard: AnimatedCardView) {
         // TODO: [Задание 5] Добавьте анимацию перетасовки карт
         // На данном этапе просто быстро двигаем нижнюю карту наверх
-        cardDataList = reorderCards(cardDataList)
-        setupCards()
+        if (isAnimating) return
+
+        isAnimating = true
+        animationStep = 1
+
+        with (bottomCard) {
+            moveCardRight {
+                animationStep = 2
+                moveCardToTop {
+                    animationStep = 3
+                    cards.forEachIndexed  { idx, view ->
+                        if (idx != 0) {
+                            view.animateCardRotation(
+                                getCardsRotation((idx - 1).mod(cards.size))
+                            )
+                        }
+                    }
+                    moveCardToFinalPosition(
+                        getCardsRotation(cards.size - 1)
+                    ) {
+                        isAnimating = false
+                        animationStep = 0
+                        cardDataList = reorderCards(cardDataList)
+                        setupCards()
+                    }
+                }
+            }
+        }
     }
 
     // Простая функция перестановки карт
